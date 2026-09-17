@@ -3,23 +3,80 @@ import torch
 import torch.nn as nn
 import open_clip
 from PIL import Image
+from streamlit_paste_button import paste_image_button as pbutton
 
 # ------------------------------------------------------------------
 # App config
 # ------------------------------------------------------------------
-st.set_page_config(page_title="Brain Tumor Classifier", page_icon="🧠", layout="centered")
+st.set_page_config(page_title="Brain Tumor MRI Classifier", page_icon="🧠", layout="centered")
 
 CLASS_NAMES = ["Meningioma", "Glioma", "Pituitary Tumor"]
+CLASS_INFO = {
+    "Meningioma": "Usually forms in the membranes covering the brain and spinal cord.",
+    "Glioma": "Originates in the brain's glial (supportive) cells.",
+    "Pituitary Tumor": "Forms in the pituitary gland at the base of the brain.",
+}
 BIOMEDCLIP_NAME = "hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224"
-HEAD_WEIGHTS_PATH = "biomedclip_head.pth"  # tiny file, a few KB
+HEAD_WEIGHTS_PATH = "biomedclip_head.pth"
+
+
+# ------------------------------------------------------------------
+# Styling
+# ------------------------------------------------------------------
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background: linear-gradient(180deg, #0f1620 0%, #0a0e14 100%);
+    }
+    .hero {
+        text-align: center;
+        padding: 1.5rem 0 0.5rem 0;
+    }
+    .hero h1 {
+        font-size: 2.4rem;
+        font-weight: 700;
+        background: linear-gradient(90deg, #7dd3fc, #a78bfa);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.2rem;
+    }
+    .hero p {
+        color: #9ca3af;
+        font-size: 1.05rem;
+    }
+    .result-card {
+        background: #131b26;
+        border: 1px solid #23303f;
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-top: 1rem;
+    }
+    .pred-label {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: #7dd3fc;
+    }
+    .pred-sub {
+        color: #9ca3af;
+        font-size: 0.95rem;
+        margin-bottom: 1rem;
+    }
+    [data-testid="stFileUploader"] {
+        border: 1px dashed #334155;
+        border-radius: 14px;
+        padding: 0.5rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # ------------------------------------------------------------------
 # Model definition (must match training notebook exactly)
 # ------------------------------------------------------------------
 class BioMedCLIPLinearProbeClassifier(nn.Module):
-    """Frozen BioMedCLIP visual encoder + a trainable Linear(embed_dim -> num_classes) head."""
-
     def __init__(self, visual_encoder, embed_dim, num_classes):
         super().__init__()
         self.visual_encoder = visual_encoder
@@ -32,12 +89,6 @@ class BioMedCLIPLinearProbeClassifier(nn.Module):
         return self.head(image_features)
 
 
-# ------------------------------------------------------------------
-# Cached model loading — runs once per app session, not per request.
-# The BiomedCLIP backbone downloads from Hugging Face Hub the first
-# time the app runs (and Streamlit Cloud caches it on disk after that).
-# Only the tiny trained head is loaded from the file you upload to GitHub.
-# ------------------------------------------------------------------
 @st.cache_resource
 def load_model():
     biomedclip_model, preprocess = open_clip.create_model_from_pretrained(BIOMEDCLIP_NAME)
@@ -55,40 +106,74 @@ def load_model():
     return model, preprocess
 
 
-# ------------------------------------------------------------------
-# UI
-# ------------------------------------------------------------------
-st.title("🧠 Brain Tumor MRI Classifier")
-st.caption("AIxMED Summer Series — BioMedCLIP linear-probe classifier")
-st.write(
-    "Upload a T1-weighted contrast-enhanced brain MRI slice. The model predicts "
-    "one of three tumor types: **Meningioma**, **Glioma**, or **Pituitary Tumor**."
-)
+def run_prediction(image: Image.Image):
+    image = image.convert("RGB")
+    col1, col2 = st.columns([1, 1])
 
-st.warning(
-    "⚠️ This is a student research project for educational purposes only. "
-    "It is **not** a diagnostic tool and must not be used for real medical decisions."
-)
+    with col1:
+        st.image(image, caption="MRI slice", use_container_width=True)
 
-uploaded_file = st.file_uploader("Upload an MRI image", type=["png", "jpg", "jpeg"])
-
-if uploaded_file is not None:
-    image = Image.open(uploaded_file).convert("RGB")
-    st.image(image, caption="Uploaded MRI slice", use_container_width=True)
-
-    with st.spinner("Loading model and running inference..."):
+    with st.spinner("Analyzing scan..."):
         model, preprocess = load_model()
         pixel_values = preprocess(image).unsqueeze(0)
-
         with torch.no_grad():
             logits = model(pixel_values)
             probs = torch.softmax(logits, dim=1)[0]
 
     pred_idx = int(probs.argmax())
-    st.subheader(f"Prediction: **{CLASS_NAMES[pred_idx]}**")
-    st.write(f"Confidence: {probs[pred_idx]*100:.1f}%")
+    pred_name = CLASS_NAMES[pred_idx]
 
-    st.write("### Class probabilities")
+    with col2:
+        st.markdown(
+            f"""
+            <div class="result-card">
+                <div class="pred-sub">Prediction</div>
+                <div class="pred-label">{pred_name}</div>
+                <div class="pred-sub">Confidence: {probs[pred_idx]*100:.1f}%</div>
+                <div style="color:#cbd5e1; font-size:0.9rem;">{CLASS_INFO[pred_name]}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("#### Class probabilities")
     for name, p in zip(CLASS_NAMES, probs.tolist()):
-        st.write(f"{name}")
-        st.progress(p)
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            st.progress(p)
+        with c2:
+            st.write(f"**{name}** — {p*100:.1f}%")
+
+
+# ------------------------------------------------------------------
+# UI
+# ------------------------------------------------------------------
+st.markdown(
+    """
+    <div class="hero">
+        <h1>🧠 Brain Tumor MRI Classifier</h1>
+        <p>Upload or paste a brain MRI slice to get a prediction</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+tab_upload, tab_paste = st.tabs(["📁 Upload", "📋 Paste"])
+
+image_to_classify = None
+
+with tab_upload:
+    uploaded_file = st.file_uploader("Upload an MRI image", type=["png", "jpg", "jpeg"])
+    if uploaded_file is not None:
+        image_to_classify = Image.open(uploaded_file)
+
+with tab_paste:
+    st.caption("Copy an image, then click below to paste it in (works in Chrome, Edge, Safari).")
+    paste_result = pbutton("📋 Paste image from clipboard")
+    if paste_result.image_data is not None:
+        image_to_classify = paste_result.image_data
+
+if image_to_classify is not None:
+    run_prediction(image_to_classify)
+else:
+    st.info("Upload or paste an MRI image above to get started.")
