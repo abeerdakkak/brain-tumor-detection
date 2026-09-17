@@ -1,3 +1,4 @@
+import textwrap
 import streamlit as st
 import torch
 import torch.nn as nn
@@ -29,7 +30,8 @@ HEAD_WEIGHTS_PATH = "biomedclip_head.pth"
 # thing that should stand out: the prediction.
 # ------------------------------------------------------------------
 st.markdown(
-    """
+    textwrap.dedent(
+        """\
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -163,7 +165,8 @@ st.markdown(
     }
     footer {visibility: hidden;}
     </style>
-    """,
+    """
+    ),
     unsafe_allow_html=True,
 )
 
@@ -222,26 +225,30 @@ def run_prediction(image: Image.Image):
     with col2:
         st.markdown('<div class="panel-label">CLASSIFICATION</div>', unsafe_allow_html=True)
         st.markdown(
-            f"""
+            textwrap.dedent(
+                f"""\
             <div class="readout">
                 <div class="readout-pred">{pred_name}</div>
                 <div class="readout-conf mono">{probs[pred_idx]*100:.1f}% confidence</div>
                 <div class="readout-desc">{CLASS_INFO[pred_name]}</div>
             </div>
-            """,
+            """
+            ),
             unsafe_allow_html=True,
         )
 
     st.markdown('<div class="panel-label" style="margin-top:1.6rem;">PROBABILITY DISTRIBUTION</div>', unsafe_allow_html=True)
     rows = ""
     for name, p in zip(CLASS_NAMES, probs.tolist()):
-        rows += f"""
+        rows += textwrap.dedent(
+            f"""\
         <div class="prob-row">
             <div class="prob-name">{name}</div>
             <div class="prob-track"><div class="prob-fill" style="width:{p*100:.1f}%;"></div></div>
             <div class="prob-val mono">{p*100:.1f}%</div>
         </div>
         """
+        )
     st.markdown(rows, unsafe_allow_html=True)
 
 
@@ -249,11 +256,13 @@ def run_prediction(image: Image.Image):
 # UI
 # ------------------------------------------------------------------
 st.markdown(
-    """
+    textwrap.dedent(
+        """\
     <div class="status-bar">
         <span class="status-dot"></span> MODEL READY &nbsp;·&nbsp; BIOMEDCLIP LINEAR PROBE &nbsp;·&nbsp; 3-CLASS
     </div>
-    """,
+    """
+    ),
     unsafe_allow_html=True,
 )
 
